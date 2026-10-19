@@ -1,23 +1,26 @@
-"use strict";
+"sust";
 
 const crypto = require("crypto");
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16;
+const KEY_ENV_VAR = "DATABASE_ENCRYPTION_KEY";
+const MIN_KEY_LENGTH = 16;
 
 function getEncryptionKey() {
-  const key = process.env.DATABASE_ENCRYPTION_KEY;
-  if (!key || key.length < 16) {
-    throw new Error("DATABASE_ENCRYPTION_KEY must be at least 16 characters");
+  const key = process.env && process.env[KEY_ENV_VAR];
+  if (!key || key.length < MIN_KEY_LENGTH) {
+    throw new Error(`${KEY_ENV_VAR} must be at least ${MIN_KEY_LENGTH} characters`);
   }
-  
-  // Ensure the key is exactly 32 bytes for aes-256-gcm
-  // If the user provided key is exactly 32 chars, use it.
+
+  // Ensure the key is exactly 32 bytes for aes-256-gcm.
+  // If the user provided key is exactly 32 bytes, use it directly.
   // Otherwise, hash it to 32 bytes.
-  if (Buffer.from(key).length === 32) {
-    return Buffer.from(key);
+  const keyBuffer = Buffer.from(key, "utf8");
+  if (keyBuffer.length === 32) {
+    return keyBuffer;
   }
-  return crypto.createHash("sha256").update(String(key)).digest();
+  return crypto.createHash("sha256").update(keyBuffer).digest();
 }
 
 function encrypt(plaintext) {
@@ -25,7 +28,7 @@ function encrypt(plaintext) {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  let encrypted = cipher.update(plaintext, "utf8", "hex");
+  let encrypted = cipher.update(String(plaintext), "utf8", "hex");
   encrypted += cipher.final("hex");
   const authTag = cipher.getAuthTag().toString("hex");
   return `${iv.toString("hex")}:${authTag}:${encrypted}`;
@@ -34,11 +37,14 @@ function encrypt(plaintext) {
 function decrypt(encryptedText) {
   if (encryptedText == null || encryptedText === "") return null;
   try {
-    const parts = encryptedText.split(":");
+    const parts = String(encryptedText).split(":");
     if (parts.length !== 3) {
       return null; // Not in expected format, possibly old data or invalid
     }
     const [ivHex, authTagHex, encryptedDataHex] = parts;
+    if (ivHex.length !== IV_LENGTH * 2 || authTagHex.length !== 32) {
+      return null;
+    }
     const iv = Buffer.from(ivHex, "hex");
     const authTag = Buffer.from(authTagHex, "hex");
     const key = getEncryptionKey();
@@ -54,10 +60,10 @@ function decrypt(encryptedText) {
 
 function hashEmail(email) {
   if (!email) return null;
-  const emailStr = email.trim().toLowerCase();
+  const emailStr = String(email).trim().toLowerCase();
   const key = getEncryptionKey();
   const hmac = crypto.createHmac("sha256", key);
-  hmac.update(emailStr);
+  hmac.update(emailStr, "utf8");
   return hmac.digest("hex");
 }
 
