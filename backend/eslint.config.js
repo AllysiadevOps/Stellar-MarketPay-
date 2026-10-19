@@ -61,10 +61,22 @@ module.exports = [
 
   // Test files additionally get the Jest globals.
   {
-    files: ["**/*.test.js", "**/*.test.*.js", "**/__tests__/**/*.js", "tests/**/*.js"],
+    files: ["**/*.test.js", "**/*.test/*.js", "**/__tests__/**/*.js", "tests/**/*.js"],
     languageOptions: {
       globals: {
         ...globals.jest,
+      },
+    },
+  },
+
+  // k6 scenarios run in the k6 runtime, which exposes its own globals and
+  // uses ESM imports.
+  {
+    files: ["k6/**/*.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        ...globals.k6,
       },
     },
   },
